@@ -55,7 +55,7 @@ class PDFEmbed {
     
     func embedDocument() async throws -> Void {
         let chunks: [String]
-        chunks = splitDocumentIntoSelections(self.document)
+        chunks = splitDocumentIntoPages(self.document)
         print("Total chunks: \(chunks.count)")
         self.embeddings = try await self.embedder.embed(chunks: chunks)
     }
@@ -70,6 +70,30 @@ class PDFEmbed {
         }
         return selection
     }
+    
+    func splitDocumentIntoPages(_ document: PDFDocument) -> [String] {
+        var pages: [String] = []
+        let pageCount = document.pageCount
+        
+        for pageIndex in 0..<pageCount {
+            guard let page = document.page(at: pageIndex) else {
+                print("page retrieval failed")
+                continue
+            }
+
+            let string = page.string ?? ""
+            pages.append(string)
+
+            let nsRange = NSRange(location: 0, length: string.count)
+            var pdfSelectionRanges = PDFSelectionRanges()
+            pdfSelectionRanges.ranges.append(nsRange)
+            pdfSelectionRanges.pages.append(pageIndex)
+            selectionRanges.append(pdfSelectionRanges)
+        }
+        
+        return pages
+    }
+
     
     func splitDocumentIntoSelections(_ document: PDFDocument) -> [String] {
         var chunks: [String] = []

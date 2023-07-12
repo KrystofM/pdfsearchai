@@ -32,7 +32,7 @@ struct AppView: View {
         )
         _chatStore = StateObject(
             wrappedValue: ChatStore(
-                openAIClient: OpenAI(apiToken: "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"),
+                openAIClient: OpenAI(apiToken: "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"),
                 idProvider: idProvider
             )
         )

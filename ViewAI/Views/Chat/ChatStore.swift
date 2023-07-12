@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import OpenAI
+import PDFKit
 
 public final class ChatStore: ObservableObject {
     public var openAIClient: OpenAIProtocol
@@ -62,15 +63,27 @@ public final class ChatStore: ObservableObject {
         conversations.removeAll(where: { $0.id == conversationId })
     }
     
+    func prepareRawContent(_ searchResults: [PDFSelection], message: String) -> String {
+        var preparedMessage = "Search Results:\n"
+        for (index, result) in searchResults.enumerated() {
+            preparedMessage += "\(index + 1). \(result.string ?? "")\n"
+        }
+        preparedMessage += "\nPlease answer based on the provided search results and specify the index(es) of the used resource(s)."
+        
+        return message + preparedMessage
+    }
+    
     @MainActor
     func sendMessage(
         _ message: Message,
         conversationId: Conversation.ID,
+        searchResults: [PDFSelection],
         model: Model
     ) async {
         guard let conversationIndex = conversations.firstIndex(where: { $0.id == conversationId }) else {
             return
         }
+        
         conversations[conversationIndex].messages.append(message)
 
         await completeChat(
@@ -99,15 +112,39 @@ public final class ChatStore: ObservableObject {
                 query: ChatQuery(
                     model: model,
                     messages: conversation.messages.map { message in
-                        Chat(role: message.role, content: message.content)
+                        Chat(role: message.role, content: message.rawContent)
                     }
                 )
             )
             
-            var functionCallName = ""
-            var functionCallArguments = ""
+            
             for try await partialChatResult in chatsStream {
-                
+                for choice in partialChatResult.choices {
+                    let existingMessages = conversations[conversationIndex].messages
+                    // Function calls are also streamed, so we need to accumulate.
+                    var messageText = choice.delta.content ?? ""
+                    let message = Message(
+                        id: partialChatResult.id,
+                        role: choice.delta.role ?? .assistant,
+                        content: messageText,
+                        rawContent: messageText,
+                        createdAt: Date(timeIntervalSince1970: TimeInterval(partialChatResult.created))
+                    )
+                    if let existingMessageIndex = existingMessages.firstIndex(where: { $0.id == partialChatResult.id }) {
+                        // Meld into previous message
+                        let previousMessage = existingMessages[existingMessageIndex]
+                        let combinedMessage = Message(
+                            id: message.id, // id stays the same for different deltas
+                            role: message.role,
+                            content: previousMessage.content + message.content,
+                            rawContent: previousMessage.content + message.content,
+                            createdAt: message.createdAt
+                        )
+                        conversations[conversationIndex].messages[existingMessageIndex] = combinedMessage
+                    } else {
+                        conversations[conversationIndex].messages.append(message)
+                    }
+                }
             }
         }  catch let DecodingError.keyNotFound(key, context) {
             print("Key '\(key)' not found:", context.debugDescription)

@@ -15,6 +15,7 @@ public struct ChatView: View {
     @ObservedObject var embedStore: AppViewModel
     
     @Environment(\.idProviderValue) var idProvider
+    @Environment(\.dateProviderValue) var dateProvider
 
     init(chatStore: ChatStore, embedStore: AppViewModel) {
         self.chatStore = chatStore
@@ -31,15 +32,20 @@ public struct ChatView: View {
                     
                     print(searchResults)
                     print(message)
+                    let raw = chatStore.prepareRawContent(searchResults, message: message)
+                    let message = Message(
+                        id: idProvider(),
+                        role: .user,
+                        content: message,
+                        rawContent: raw,
+                        createdAt: dateProvider()
+                    )
+                    print(raw)
                     
                     await chatStore.sendMessage(
-                        Message(
-                            id: idProvider(),
-                            role: .user,
-                            content: message,
-                            createdAt: Date.init()
-                        ),
+                        message,
                         conversationId: chatStore.currentConversation.id,
+                        searchResults: searchResults,
                         model: selectedModel
                     )
                 }
