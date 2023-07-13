@@ -22,7 +22,7 @@ struct MainApp: App {
     
     var body: some Scene {
         DocumentGroup(newDocument: PDFReadWrite()) { file in
-            AppView(pdf: file.$document, idProvider: idProvider)
+            AppView(pdf: file.$document, idProvider: idProvider, dateProvider: dateProvider)
                 .onAppear {
                     NSApp.windows.first?.setContentSize(NSScreen.main?.frame.size ?? NSSize(width: 800, height: 600))
                 }

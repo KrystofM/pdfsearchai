@@ -13,6 +13,7 @@ import PDFKit
 public final class ChatStore: ObservableObject {
     public var openAIClient: OpenAIProtocol
     let idProvider: () -> String
+    let dateProvider: () -> Date
 
     @Published var conversations: [Conversation] = []
     @Published var conversationErrors: [Conversation.ID: Error] = [:]
@@ -41,10 +42,12 @@ public final class ChatStore: ObservableObject {
 
     public init(
         openAIClient: OpenAIProtocol,
-        idProvider: @escaping () -> String
+        idProvider: @escaping () -> String,
+        dateProvider: @escaping () -> Date
     ) {
         self.openAIClient = openAIClient
         self.idProvider = idProvider
+        self.dateProvider = dateProvider
     }
 
     // MARK: - Events
@@ -64,13 +67,34 @@ public final class ChatStore: ObservableObject {
     }
     
     func prepareRawContent(_ searchResults: [PDFSelection], message: String) -> String {
-        var preparedMessage = "Search Results:\n"
+        var finalMessage = "You goal is to help me to understand parts of a large document. I will be asking questions that are aimed at gaining knowledge with respect to this document. Whenever I ask a question I will provide sections of the document that correspond to the question that I am asking. Your goal will be to answer my questions as best as you can while using the document sections as reference. Dont answer it is based on provided sections at the start of your answer. Each section is seperated by '*Section #*' where # will be the number. At the end of your response provide a list of used sections based on their pagenumber and sort them from most important to least. Only answer with numbers of the sections, nothing more or less, seperated by comma. If you did not use a section at all, then dont provide it. ALWAYS CREATE A FUNCTION CALL!\n"
+        finalMessage += "Question: "
+        finalMessage += message
+        finalMessage += "\nSections:\n"
         for (index, result) in searchResults.enumerated() {
-            preparedMessage += "\(index + 1). \(result.string ?? "")\n"
+            finalMessage += "*Section \(index)*\n \(result.string ?? "")\n"
         }
-        preparedMessage += "\nPlease answer based on the provided search results and specify the index(es) of the used resource(s)."
         
-        return message + preparedMessage
+        return finalMessage
+    }
+    
+    func doesContainResponse(text: String) -> Bool {
+        let searchText = "\"response\": \""
+        return text.contains(searchText)
+    }
+    
+    func getTextAfterResponse(text: String) -> String? {
+        guard let rangeStart = text.range(of: "\"response\": \"") else {
+            return nil
+        }
+        
+        let startIndex = rangeStart.upperBound
+        
+        if let rangeEnd = text.range(of: "\",", range: startIndex..<text.endIndex) {
+            return String(text[startIndex..<rangeEnd.lowerBound]).replacingOccurrences(of: "\\n", with: "\n")
+        } else {
+            return String(text[startIndex...]).replacingOccurrences(of: "\\n", with: "\n")
+        }
     }
     
     @MainActor
@@ -93,65 +117,105 @@ public final class ChatStore: ObservableObject {
     }
     
     @MainActor
-    func completeChat(
+    func sendSingularMessage(
+        _ message: Message,
         conversationId: Conversation.ID,
+        searchResults: [PDFSelection],
         model: Model
     ) async {
-        guard let conversation = conversations.first(where: { $0.id == conversationId }) else {
+        guard let conversationIndex = conversations.firstIndex(where: { $0.id == conversationId }) else {
             return
         }
-                
-        conversationErrors[conversationId] = nil
+        conversations[conversationIndex].messages.append(message)
+        
+        let currentMessages = [message]
 
+        conversationErrors[conversationId] = nil
+        
+        // First send the message and retrieve a function
+        var functionCallName = ""
+        var functionCallArguments = ""
         do {
-            guard let conversationIndex = conversations.firstIndex(where: { $0.id == conversationId }) else {
-                return
-            }
+            let sectionsFunction = ChatFunctionDeclaration(
+                name: "getReponseAndSections",
+                description: "Get a response to the question and return a list of sections sorted based on their imporance.",
+                parameters: .init(
+                  type: .object,
+                  properties: [
+                    "response": .init(type: .string, description: "Detailed and good reponse to the provided question based on the sections given."),
+                    "sections": .init(type: .array, description: "The sorted list of sections based on their importance to the response, if a section is not used to create the response do not include it.", items: .init(type: .number))
+                  ],
+                  required: ["response","sections"]
+                )
+            )
+            
+            let functions = [sectionsFunction]
 
             let chatsStream: AsyncThrowingStream<ChatStreamResult, Error> = openAIClient.chatsStream(
                 query: ChatQuery(
                     model: model,
-                    messages: conversation.messages.map { message in
+                    messages: currentMessages.map { message in
                         Chat(role: message.role, content: message.rawContent)
-                    }
+                    },
+                    functions: functions
                 )
             )
-            
             
             for try await partialChatResult in chatsStream {
                 for choice in partialChatResult.choices {
                     let existingMessages = conversations[conversationIndex].messages
                     // Function calls are also streamed, so we need to accumulate.
                     var messageText = choice.delta.content ?? ""
-                    let message = Message(
-                        id: partialChatResult.id,
-                        role: choice.delta.role ?? .assistant,
-                        content: messageText,
-                        rawContent: messageText,
-                        createdAt: Date(timeIntervalSince1970: TimeInterval(partialChatResult.created))
-                    )
+                    if let functionCallDelta = choice.delta.functionCall {
+                        if let nameDelta = functionCallDelta.name {
+                            functionCallName += nameDelta
+                        }
+                        if let argumentsDelta = functionCallDelta.arguments {
+                            functionCallArguments += argumentsDelta
+                            print(functionCallArguments)
+                            print(self.doesContainResponse(text: functionCallArguments))
+                            print(self.getTextAfterResponse(text: functionCallArguments) ?? "")
+                            if (self.doesContainResponse(text: functionCallArguments)) {
+                                messageText = self.getTextAfterResponse(text: functionCallArguments) ?? ""
+                            }
+                        }
+                    }
+                    if let finishReason = choice.finishReason,
+                       finishReason == "function_call" {
+//                        if (functionCallName == "getReponseAndSections") {
+//
+//                        }
+                        print(functionCallName)
+                        print(functionCallArguments)
+                        if (self.doesContainResponse(text: functionCallArguments)) {
+                            messageText = self.getTextAfterResponse(text: functionCallArguments) ?? ""
+                        }
+                    }
                     if let existingMessageIndex = existingMessages.firstIndex(where: { $0.id == partialChatResult.id }) {
                         // Meld into previous message
-                        let previousMessage = existingMessages[existingMessageIndex]
-                        let combinedMessage = Message(
-                            id: message.id, // id stays the same for different deltas
-                            role: message.role,
-                            content: previousMessage.content + message.content,
-                            rawContent: previousMessage.content + message.content,
-                            createdAt: message.createdAt
-                        )
-                        conversations[conversationIndex].messages[existingMessageIndex] = combinedMessage
+                        conversations[conversationIndex].messages[existingMessageIndex].content = messageText
+                        conversations[conversationIndex].messages[existingMessageIndex].rawContent = messageText
                     } else {
+                        let message = Message(
+                            id: partialChatResult.id,
+                            role: choice.delta.role ?? .assistant,
+                            content: messageText,
+                            rawContent: messageText,
+                            createdAt: Date(timeIntervalSince1970: TimeInterval(partialChatResult.created))
+                        )
                         conversations[conversationIndex].messages.append(message)
                     }
                 }
             }
-        }  catch let DecodingError.keyNotFound(key, context) {
+        } catch let DecodingError.keyNotFound(key, context) {
             print("Key '\(key)' not found:", context.debugDescription)
             print("codingPath:", context.codingPath)
             print("context", context)
         } catch {
             print("error: ", error)
         }
+        
+        
     }
+    
 }

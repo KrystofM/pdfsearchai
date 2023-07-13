@@ -42,7 +42,7 @@ public struct ChatView: View {
                     )
                     print(raw)
                     
-                    await chatStore.sendMessage(
+                    await chatStore.sendSingularMessage(
                         message,
                         conversationId: chatStore.currentConversation.id,
                         searchResults: searchResults,

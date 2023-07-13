@@ -26,7 +26,7 @@ class PDFEmbed {
         self.selectionRanges = []
     }
     
-    func searchDocument(query: String, k_similar: Int = 5) async throws -> [PDFSelection] {
+    func searchDocument(query: String, k_similar: Int = 4) async throws -> [PDFSelection] {
         let startTime = DispatchTime.now()
         print("Starting embedding of query")
         let queryEmbedding = try await self.embedder.embed(chunks: [query])[0]

@@ -25,7 +25,7 @@ struct AppView: View {
     @Environment(\.idProviderValue) var idProvider
     @Environment(\.dateProviderValue) var dateProvider
     
-    init(pdf: Binding<PDFReadWrite>, idProvider: @escaping () -> String) {
+    init(pdf: Binding<PDFReadWrite>, idProvider: @escaping () -> String, dateProvider: @escaping () -> Date) {
         _pdf = pdf
         _viewModel = StateObject(
             wrappedValue: AppViewModel(pdf: pdf.wrappedValue)
@@ -33,7 +33,8 @@ struct AppView: View {
         _chatStore = StateObject(
             wrappedValue: ChatStore(
                 openAIClient: OpenAI(apiToken: "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"),
-                idProvider: idProvider
+                idProvider: idProvider,
+                dateProvider: dateProvider
             )
         )
     }
