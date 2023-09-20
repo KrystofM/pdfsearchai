@@ -9,6 +9,7 @@ import Foundation
 import AppKit
 import OpenAI
 import SwiftUI
+import PDFKit
 
 struct DetailView: View {
     @State var inputText: String = ""
@@ -21,6 +22,7 @@ struct DetailView: View {
     let conversation: Conversation
     let error: Error?
     let sendMessage: (String, Model) -> Void
+    let selectReference: (PDFSelection) -> Void
 
     private var fillColor: Color {
         return Color(nsColor: NSColor.textBackgroundColor)
@@ -35,10 +37,11 @@ struct DetailView: View {
             ScrollViewReader { scrollViewProxy in
                 VStack {
                     List {
-                        ForEach(conversation.messages) { message in
-                            ChatBubble(message: message)
-                        }
-                        .listRowSeparator(.hidden)
+//                        ForEach(conversation.messages) { message in
+//                            ChatBubble(selectReference: selectReference, message: message)
+//                        }
+//                        .listRowSeparator(.hidden)
+                        ChatBubble(selectReference: selectReference, message: Message(id: "Hey", role: .assistant, content: "Some content", createdAt: Date.now))
                     }
                     .listStyle(.plain)
                     .animation(.default, value: conversation.messages)

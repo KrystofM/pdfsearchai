@@ -57,7 +57,10 @@ struct AppView: View {
                     }
             }
         } content: {
-            ChatView(chatStore: chatStore, embedStore: viewModel)
+            ChatView(chatStore: chatStore, embedStore: viewModel) { selection in
+                nextDestination = selection.destination
+                pdf.document.annotateSearchResults([selection])
+            }
                 .frame(width: 350)
         } detail: {
             PDFViewWrapper(document: pdf.document, pdfDestination: nextDestination)

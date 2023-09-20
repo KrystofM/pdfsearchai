@@ -98,25 +98,6 @@ public final class ChatStore: ObservableObject {
     }
     
     @MainActor
-    func sendMessage(
-        _ message: Message,
-        conversationId: Conversation.ID,
-        searchResults: [PDFSelection],
-        model: Model
-    ) async {
-        guard let conversationIndex = conversations.firstIndex(where: { $0.id == conversationId }) else {
-            return
-        }
-        
-        conversations[conversationIndex].messages.append(message)
-
-        await completeChat(
-            conversationId: conversationId,
-            model: model
-        )
-    }
-    
-    @MainActor
     func sendSingularMessage(
         _ message: Message,
         conversationId: Conversation.ID,
@@ -132,13 +113,13 @@ public final class ChatStore: ObservableObject {
 
         conversationErrors[conversationId] = nil
         
-        // First send the message and retrieve a function
+        
         var functionCallName = ""
         var functionCallArguments = ""
         do {
             let sectionsFunction = ChatFunctionDeclaration(
                 name: "getReponseAndSections",
-                description: "Get a response to the question and return a list of sections sorted based on their imporance.",
+                description: "Get a response to the question and return a list of sections sorted based on their importance.",
                 parameters: .init(
                   type: .object,
                   properties: [
@@ -172,9 +153,6 @@ public final class ChatStore: ObservableObject {
                         }
                         if let argumentsDelta = functionCallDelta.arguments {
                             functionCallArguments += argumentsDelta
-                            print(functionCallArguments)
-                            print(self.doesContainResponse(text: functionCallArguments))
-                            print(self.getTextAfterResponse(text: functionCallArguments) ?? "")
                             if (self.doesContainResponse(text: functionCallArguments)) {
                                 messageText = self.getTextAfterResponse(text: functionCallArguments) ?? ""
                             }
@@ -182,17 +160,11 @@ public final class ChatStore: ObservableObject {
                     }
                     if let finishReason = choice.finishReason,
                        finishReason == "function_call" {
-//                        if (functionCallName == "getReponseAndSections") {
-//
-//                        }
-                        print(functionCallName)
-                        print(functionCallArguments)
                         if (self.doesContainResponse(text: functionCallArguments)) {
                             messageText = self.getTextAfterResponse(text: functionCallArguments) ?? ""
                         }
                     }
                     if let existingMessageIndex = existingMessages.firstIndex(where: { $0.id == partialChatResult.id }) {
-                        // Meld into previous message
                         conversations[conversationIndex].messages[existingMessageIndex].content = messageText
                         conversations[conversationIndex].messages[existingMessageIndex].rawContent = messageText
                     } else {

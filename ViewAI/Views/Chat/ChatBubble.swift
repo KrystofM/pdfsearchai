@@ -7,8 +7,10 @@
 
 import Foundation
 import SwiftUI
+import PDFKit
 
 struct ChatBubble: View {
+    let selectReference: (PDFSelection) -> Void
     let message: Message
 
     private var assistantBackgroundColor: Color {

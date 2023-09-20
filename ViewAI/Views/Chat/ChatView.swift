@@ -9,17 +9,20 @@ import Combine
 import SwiftUI
 import AppKit
 import OpenAI
+import PDFKit
 
 public struct ChatView: View {
     @ObservedObject var chatStore: ChatStore
     @ObservedObject var embedStore: AppViewModel
+    let selectReference: (PDFSelection) -> Void
     
     @Environment(\.idProviderValue) var idProvider
     @Environment(\.dateProviderValue) var dateProvider
 
-    init(chatStore: ChatStore, embedStore: AppViewModel) {
+    init(chatStore: ChatStore, embedStore: AppViewModel, selectReference: @escaping (PDFSelection) -> Void) {
         self.chatStore = chatStore
         self.embedStore = embedStore
+        self.selectReference = selectReference
     }
     
     public var body: some View {
@@ -30,17 +33,13 @@ public struct ChatView: View {
                 Task {
                     let searchResults = try! await embedStore.embeddedDocument?.searchDocument(query: message) ?? []
                     
-                    print(searchResults)
-                    print(message)
-                    let raw = chatStore.prepareRawContent(searchResults, message: message)
                     let message = Message(
                         id: idProvider(),
                         role: .user,
                         content: message,
-                        rawContent: raw,
+                        rawContent: chatStore.prepareRawContent(searchResults, message: message),
                         createdAt: dateProvider()
                     )
-                    print(raw)
                     
                     await chatStore.sendSingularMessage(
                         message,
@@ -49,7 +48,8 @@ public struct ChatView: View {
                         model: selectedModel
                     )
                 }
-            }
+            },
+            selectReference: selectReference
         )
     }
 }

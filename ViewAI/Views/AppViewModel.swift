@@ -31,7 +31,7 @@ class AppViewModel: ObservableObject {
             if (try !EmbedPDFStore.checkPdfDataFileExists(pdfIdentifier: pdf.documentId)) {
                 try await createEmbeddingAndSave()
             } else {
-                try await loeadSavedEmbedding()
+                try await loadSavedEmbedding()
             }
         } catch {
             print("Failed loading embeddings!")
@@ -62,7 +62,7 @@ class AppViewModel: ObservableObject {
         isEmbeddingLoaded = true
     }
     
-    func loeadSavedEmbedding() async throws {
+    func loadSavedEmbedding() async throws {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         let startTime = Date()

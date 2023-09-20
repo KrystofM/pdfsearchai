@@ -7,6 +7,7 @@
 
 import Foundation
 import OpenAI
+import PDFKit
 
 struct Message {
     var id: String
@@ -16,6 +17,7 @@ struct Message {
     var name: String?
     var functionCall: ChatFunctionCall?
     var createdAt: Date
+    var selections: [PDFSelection]?
 }
 
-extension Message: Equatable, Codable, Identifiable {}
+extension Message: Equatable, Identifiable {}
