@@ -18,8 +18,12 @@ extension PDFSelection: Identifiable {
         return self.pages.first!
     }
     
+    var firstPageString: String {
+        return "p. \(firstPage.pageRef!.pageNumber)"
+    }
+    
     var pageString: String {
-        let pageRange = self.pages
+        _ = self.pages
         let firstPage = firstPage.label
         return "Page \(firstPage ?? "0")"
     }

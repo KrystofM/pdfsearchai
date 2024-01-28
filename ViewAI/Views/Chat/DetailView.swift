@@ -15,9 +15,9 @@ struct DetailView: View {
     @State var inputText: String = ""
     @FocusState private var isFocused: Bool
     @State private var showsModelSelectionSheet = false
-    @State private var selectedChatModel: Model = .gpt3_5Turbo0613
+    @State private var selectedChatModel: Model = .gpt4_1106_preview
 
-    private let availableChatModels: [Model] = [.gpt3_5Turbo0613, .gpt4]
+    private let availableChatModels: [Model] = [.gpt4, .gpt4_1106_preview]
 
     let conversation: Conversation
     let error: Error?
@@ -37,11 +37,10 @@ struct DetailView: View {
             ScrollViewReader { scrollViewProxy in
                 VStack {
                     List {
-//                        ForEach(conversation.messages) { message in
-//                            ChatBubble(selectReference: selectReference, message: message)
-//                        }
-//                        .listRowSeparator(.hidden)
-                        ChatBubble(selectReference: selectReference, message: Message(id: "Hey", role: .assistant, content: "Some content", createdAt: Date.now))
+                        ForEach(conversation.messages) { message in
+                            ChatBubble(selectReference: selectReference, message: message)
+                        }
+                        .listRowSeparator(.hidden)
                     }
                     .listStyle(.plain)
                     .animation(.default, value: conversation.messages)

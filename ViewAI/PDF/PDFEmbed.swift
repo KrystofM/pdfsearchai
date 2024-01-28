@@ -15,7 +15,7 @@ struct PDFSelectionRanges: Codable {
 
 class PDFEmbed {
     let document: PDFDocument
-    let embedder: Embedder
+    var embedder: Embedder
     public var embeddings: [[Float]]
     public var selectionRanges: [PDFSelectionRanges]
     
@@ -24,6 +24,10 @@ class PDFEmbed {
         self.embedder = embedder
         self.embeddings = []
         self.selectionRanges = []
+    }
+    
+    func updateEmbedder(embedder: Embedder) {
+        self.embedder = embedder
     }
     
     func searchDocument(query: String, k_similar: Int = 4) async throws -> [PDFSelection] {

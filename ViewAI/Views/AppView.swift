@@ -21,20 +21,21 @@ struct AppView: View {
     @State var selectedSelection: PDFSelection?
     @StateObject var viewModel: AppViewModel
     @StateObject var chatStore: ChatStore
+    @AppStorage("openAIKey") var openAIKey: String = ""
     
     @Environment(\.idProviderValue) var idProvider
     @Environment(\.dateProviderValue) var dateProvider
     
-    init(pdf: Binding<PDFReadWrite>, idProvider: @escaping () -> String, dateProvider: @escaping () -> Date) {
+    init(pdf: Binding<PDFReadWrite>, idProvider: @escaping () -> String, dateProvider: @escaping () -> Date, openAIKey: Binding<String>) {
         _pdf = pdf
         _viewModel = StateObject(
-            wrappedValue: AppViewModel(pdf: pdf.wrappedValue)
+            wrappedValue: AppViewModel(pdf: pdf.wrappedValue, openAIKey: openAIKey.wrappedValue)
         )
         _chatStore = StateObject(
             wrappedValue: ChatStore(
-                openAIClient: OpenAI(apiToken: "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"),
                 idProvider: idProvider,
-                dateProvider: dateProvider
+                dateProvider: dateProvider,
+                openAPIKey: openAIKey.wrappedValue
             )
         )
     }
@@ -58,6 +59,7 @@ struct AppView: View {
             }
         } content: {
             ChatView(chatStore: chatStore, embedStore: viewModel) { selection in
+                print("this was clicked")
                 nextDestination = selection.destination
                 pdf.document.annotateSearchResults([selection])
             }
@@ -81,6 +83,12 @@ struct AppView: View {
                 pdf.document.annotateSearchResults(searchResults)
                 selectedSelection = searchResults[0]
             }
+        }
+        .onChange(of: openAIKey) { newKey in
+            print(newKey)
+            
+            viewModel.updateOpenAIKey(newKey)
+            chatStore.updateOpenAIKey(newKey)
         }
         .navigationTitle("ViewAI")
         .task {

@@ -10,14 +10,19 @@ import Combine
 import OpenAI
 import PDFKit
 
+struct FunctionCallArguments: Codable {
+    let response: String
+    let sections: [Int]
+}
+
 public final class ChatStore: ObservableObject {
-    public var openAIClient: OpenAIProtocol
     let idProvider: () -> String
     let dateProvider: () -> Date
-
+    
     @Published var conversations: [Conversation] = []
     @Published var conversationErrors: [Conversation.ID: Error] = [:]
     @Published var selectedConversationID: Conversation.ID?
+    var openAPIKey: String
     
     var currentConversation: Conversation {
         if selectedConversationID == nil {
@@ -39,15 +44,19 @@ public final class ChatStore: ObservableObject {
         }
         .eraseToAnyPublisher()
     }
+    
+    var openAI: OpenAI {
+        return OpenAI(apiToken: self.openAPIKey)
+    }
 
     public init(
-        openAIClient: OpenAIProtocol,
         idProvider: @escaping () -> String,
-        dateProvider: @escaping () -> Date
+        dateProvider: @escaping () -> Date,
+        openAPIKey: String
     ) {
-        self.openAIClient = openAIClient
         self.idProvider = idProvider
         self.dateProvider = dateProvider
+        self.openAPIKey = openAPIKey
     }
 
     // MARK: - Events
@@ -72,19 +81,19 @@ public final class ChatStore: ObservableObject {
         finalMessage += message
         finalMessage += "\nSections:\n"
         for (index, result) in searchResults.enumerated() {
-            finalMessage += "*Section \(index)*\n \(result.string ?? "")\n"
+            finalMessage += "<section-index>\(index)<section-index>\n \(result.string ?? "")\n"
         }
         
         return finalMessage
     }
     
     func doesContainResponse(text: String) -> Bool {
-        let searchText = "\"response\": \""
+        let searchText = "\"response\":\""
         return text.contains(searchText)
     }
     
     func getTextAfterResponse(text: String) -> String? {
-        guard let rangeStart = text.range(of: "\"response\": \"") else {
+        guard let rangeStart = text.range(of: "\"response\":\"") else {
             return nil
         }
         
@@ -95,6 +104,30 @@ public final class ChatStore: ObservableObject {
         } else {
             return String(text[startIndex...]).replacingOccurrences(of: "\\n", with: "\n")
         }
+    }
+    
+    func getSectionsArray(text: String, expectedSearchResults: Int = 4) -> [Int] {
+        let searchText = "\"sections\": ["
+        let startIndex = text.range(of: searchText)?.upperBound ?? text.startIndex
+        let endIndex = text.range(of: "]", range: startIndex..<text.endIndex)?.lowerBound ?? text.endIndex
+        let substring = text[startIndex..<endIndex].replacingOccurrences(of: " ", with: "")
+        print(substring)
+        let array = substring.components(separatedBy: ",")
+        var result: [Int] = []
+        for item in array {
+            if let number = Int(item) {
+                result.append(number)
+            }
+        }
+        
+        // check if only section indexes 0-(expectSearchResults - 1) are present, delete all other sections
+        result.removeAll(where: { $0 >= expectedSearchResults })
+        
+        return result
+    }
+    
+    func updateOpenAIKey(_ newKey: String) {
+        self.openAPIKey = newKey
     }
     
     @MainActor
@@ -108,14 +141,13 @@ public final class ChatStore: ObservableObject {
             return
         }
         conversations[conversationIndex].messages.append(message)
-        
-        let currentMessages = [message]
-
         conversationErrors[conversationId] = nil
         
         
         var functionCallName = ""
         var functionCallArguments = ""
+        var messageId = ""
+        var chatResult: ChatStreamResult? = nil;
         do {
             let sectionsFunction = ChatFunctionDeclaration(
                 name: "getReponseAndSections",
@@ -124,25 +156,30 @@ public final class ChatStore: ObservableObject {
                   type: .object,
                   properties: [
                     "response": .init(type: .string, description: "Detailed and good reponse to the provided question based on the sections given."),
-                    "sections": .init(type: .array, description: "The sorted list of sections based on their importance to the response, if a section is not used to create the response do not include it.", items: .init(type: .number))
+                    "sections": .init(type: .array, description: "The sorted list of sections indexes that you find within the <section-index> tag based on their importance to the response, if a section is not used to create the response do not include it.", items: .init(type: .number))
                   ],
                   required: ["response","sections"]
                 )
             )
             
             let functions = [sectionsFunction]
-
-            let chatsStream: AsyncThrowingStream<ChatStreamResult, Error> = openAIClient.chatsStream(
+            
+            print("Sending message: \(message.rawContent)")
+            
+            
+            let chatsStream: AsyncThrowingStream<ChatStreamResult, Error> = self.openAI.chatsStream(
                 query: ChatQuery(
                     model: model,
-                    messages: currentMessages.map { message in
+                    messages: [
                         Chat(role: message.role, content: message.rawContent)
-                    },
+                    ],
                     functions: functions
                 )
             )
-            
+                                    
             for try await partialChatResult in chatsStream {
+                chatResult = partialChatResult
+                messageId = partialChatResult.id
                 for choice in partialChatResult.choices {
                     let existingMessages = conversations[conversationIndex].messages
                     // Function calls are also streamed, so we need to accumulate.
@@ -153,6 +190,7 @@ public final class ChatStore: ObservableObject {
                         }
                         if let argumentsDelta = functionCallDelta.arguments {
                             functionCallArguments += argumentsDelta
+                            print(functionCallArguments)
                             if (self.doesContainResponse(text: functionCallArguments)) {
                                 messageText = self.getTextAfterResponse(text: functionCallArguments) ?? ""
                             }
@@ -163,6 +201,8 @@ public final class ChatStore: ObservableObject {
                         if (self.doesContainResponse(text: functionCallArguments)) {
                             messageText = self.getTextAfterResponse(text: functionCallArguments) ?? ""
                         }
+                        print("this is the end of streaming")
+                        print(chatResult?.choices[0].delta)
                     }
                     if let existingMessageIndex = existingMessages.firstIndex(where: { $0.id == partialChatResult.id }) {
                         conversations[conversationIndex].messages[existingMessageIndex].content = messageText
@@ -174,6 +214,7 @@ public final class ChatStore: ObservableObject {
                             content: messageText,
                             rawContent: messageText,
                             createdAt: Date(timeIntervalSince1970: TimeInterval(partialChatResult.created))
+                            
                         )
                         conversations[conversationIndex].messages.append(message)
                     }
@@ -181,10 +222,24 @@ public final class ChatStore: ObservableObject {
             }
         } catch let DecodingError.keyNotFound(key, context) {
             print("Key '\(key)' not found:", context.debugDescription)
-            print("codingPath:", context.codingPath)
+            print("codingPath:", context.codingPath)            
             print("context", context)
         } catch {
             print("error: ", error)
+        }
+
+        print(functionCallArguments)
+        let sections = self.getSectionsArray(text: functionCallArguments)
+        print("sections")
+        print(sections)
+        // get the section from searchResults
+        var sectionsToReturn: [PDFSelection] = []
+        for section in sections {
+            sectionsToReturn.append(searchResults[section])
+        }
+        // get the message that was created and add the sections to it
+        if let existingMessageIndex = conversations[conversationIndex].messages.firstIndex(where: { $0.id == messageId }) {
+            conversations[conversationIndex].messages[existingMessageIndex].selections = sectionsToReturn
         }
         
         

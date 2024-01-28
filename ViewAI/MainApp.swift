@@ -10,6 +10,7 @@ import SwiftUI
 @main
 struct MainApp: App {
     @StateObject private var dataController = DataController()
+    @AppStorage("openAIKey") var openAIKey: String = ""
     let idProvider: () -> String
     let dateProvider: () -> Date
     
@@ -22,7 +23,7 @@ struct MainApp: App {
     
     var body: some Scene {
         DocumentGroup(newDocument: PDFReadWrite()) { file in
-            AppView(pdf: file.$document, idProvider: idProvider, dateProvider: dateProvider)
+            AppView(pdf: file.$document, idProvider: idProvider, dateProvider: dateProvider, openAIKey: $openAIKey)
                 .onAppear {
                     NSApp.windows.first?.setContentSize(NSScreen.main?.frame.size ?? NSSize(width: 800, height: 600))
                 }

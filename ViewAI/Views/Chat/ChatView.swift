@@ -18,6 +18,8 @@ public struct ChatView: View {
     
     @Environment(\.idProviderValue) var idProvider
     @Environment(\.dateProviderValue) var dateProvider
+    
+    @State var errorMes: Error?
 
     init(chatStore: ChatStore, embedStore: AppViewModel, selectReference: @escaping (PDFSelection) -> Void) {
         self.chatStore = chatStore
@@ -28,25 +30,32 @@ public struct ChatView: View {
     public var body: some View {
          DetailView(
             conversation: chatStore.currentConversation,
-            error: chatStore.conversationErrors[chatStore.currentConversation.id],
+            error: errorMes,
             sendMessage: { message, selectedModel in
                 Task {
-                    let searchResults = try! await embedStore.embeddedDocument?.searchDocument(query: message) ?? []
-                    
-                    let message = Message(
-                        id: idProvider(),
-                        role: .user,
-                        content: message,
-                        rawContent: chatStore.prepareRawContent(searchResults, message: message),
-                        createdAt: dateProvider()
-                    )
-                    
-                    await chatStore.sendSingularMessage(
-                        message,
-                        conversationId: chatStore.currentConversation.id,
-                        searchResults: searchResults,
-                        model: selectedModel
-                    )
+                    do {
+                        errorMes = nil
+                        
+                        let searchResults = try await embedStore.embeddedDocument?.searchDocument(query: message) ?? []
+                        
+                        let message = Message(
+                            id: idProvider(),
+                            role: .user,
+                            content: message,
+                            rawContent: chatStore.prepareRawContent(searchResults, message: message),
+                            createdAt: dateProvider()
+                        )
+                        
+                        await chatStore.sendSingularMessage(
+                            message,
+                            conversationId: chatStore.currentConversation.id,
+                            searchResults: searchResults,
+                            model: selectedModel
+                        )
+                                                
+                    } catch {
+                        errorMes = error
+                    }
                 }
             },
             selectReference: selectReference

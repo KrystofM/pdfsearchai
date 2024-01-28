@@ -29,11 +29,28 @@ struct ChatBubble: View {
         HStack {
             switch message.role {
             case .assistant:
-                Text(message.content)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(assistantBackgroundColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                VStack {
+                    Text(message.content)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(assistantBackgroundColor)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    if let selections = message.selections {
+                        HStack {
+                            ForEach(selections, id: \.self) { selection in
+                                Button(action: {
+                                    selectReference(selection)  
+                                }) {
+                                    Text("\(selection.firstPageString)")
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.gray)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                }
+                            }
+                        }
+                    }
+                }
                 Spacer(minLength: 24)
             case .user:
                 Spacer(minLength: 24)

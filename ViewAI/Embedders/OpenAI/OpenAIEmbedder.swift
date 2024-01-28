@@ -10,7 +10,7 @@ import Foundation
 
 class OpenAIEmbedder: Embedder {
     static let embedEndpoint: String = "https://api.openai.com/v1/embeddings"
-    static let embedModel: String = "text-embedding-ada-002"
+    static let embedModel: String = "text-embedding-3-large"
     let OPENAI_KEY: String
     
     init(openai_key: String) {

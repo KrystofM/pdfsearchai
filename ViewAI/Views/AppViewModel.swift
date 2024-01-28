@@ -12,18 +12,20 @@ class AppViewModel: ObservableObject {
     @Published var isEmbeddingLoaded: Bool
     @Published var embeddedDocument: PDFEmbed?
     let pdf: PDFReadWrite
+    var openAIKey: String
     private let embedPDFStore: EmbedPDFStore = EmbedPDFStore()
     
-    init(pdf: PDFReadWrite) {
+    init(pdf: PDFReadWrite, openAIKey: String) {
         self.pdf = pdf
         self.isEmbeddingLoaded = false
+        self.openAIKey = openAIKey
     }
     
     func loadEmbedding() async {
         embeddedDocument = PDFEmbed(
             document: pdf.document,
             embedder: OpenAIEmbedder(
-                openai_key: "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"
+                openai_key: self.openAIKey
             )
         )
         
@@ -36,6 +38,13 @@ class AppViewModel: ObservableObject {
         } catch {
             print("Failed loading embeddings!")
         }
+    }
+    
+    func updateOpenAIKey(_ newKey: String) {
+        self.openAIKey = newKey
+        embeddedDocument?.updateEmbedder(embedder: OpenAIEmbedder(
+            openai_key: self.openAIKey
+        ))
     }
     
     func createEmbeddingAndSave() async throws {
